@@ -1,5 +1,7 @@
 # Airfield-M4: Multimodal D-FINE and PAPF
 
+[![Airfield-M4 Dataset](https://img.shields.io/badge/Download-Airfield--M4%20Dataset-0969DA?style=for-the-badge&logo=databricks&logoColor=white)](#dataset-download)
+
 Official code release for **Airfield-M4: A Multimodal Object Detection
 Benchmark for Airport Surface Traffic Surveillance**.
 
@@ -40,6 +42,20 @@ Airfield-M4/
 ├── requirements.txt
 └── docs/ADAPTING_OTHER_DETECTORS.md
 ```
+
+## Dataset download
+
+Airfield-M4 contains aligned RGB, thermal-infrared, and depth observations,
+COCO-format object-detection annotations, and category-level text prompts for
+airport surface traffic surveillance. The full dataset and its official
+training/validation split will be released through the links below.
+
+- **Google Drive:** Coming soon
+- **Baidu Netdisk:** Coming soon
+
+The source repository does not contain dataset archives. After downloading the
+dataset, extract it under `data/Airfield-M4/` using the directory structure
+described in [Data preparation](#data-preparation).
 
 ## Installation
 
