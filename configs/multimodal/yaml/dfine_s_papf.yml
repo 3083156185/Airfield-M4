@@ -1,0 +1,51 @@
+backbone:
+  # [from, module, args]
+  - [-1, nn.Identity, []]                                                          # 0
+  - [0, GetRGBModalityTensor, []]                                                 # 1-RGB
+  - [0, GetNPYModalityTensor, []]                                                 # 2-NPY
+
+  - [1, StemBlock, [16, 16, True]]                                               # 3-RGB-P2/4
+  - [-1, HG_Stage, [16, 64, 1, 3, False, False, 3, True, 'se']]                  # 4-RGB-P2/4
+  - [-1, HG_Stage, [32, 256, 1, 3, True, False, 3, True, 'se']]                  # 5-RGB-P3/8
+
+  - [2, StemBlock, [16, 16, True]]                                                # 6-NPY-P2/4
+  - [-1, HG_Stage, [16, 32, 1, 1, False, False, 3, True, 'se']]                  # 7-NPY-P2/4
+  - [-1, HG_Stage, [32, 128, 1, 1, True, False, 3, True, 'se']]                  # 8-NPY-P3/8
+
+  - [[5, 8], Concat, []]                                                          # 9-P3/8-fused-for-RGB
+  - [-1, HG_Stage, [64, 512, 2, 3, True, True, 5, True, 'se']]                   # 10-RGB-P4/16 (from fused P3)
+  - [8, HG_Stage, [64, 256, 1, 1, True, True, 5, True, 'se']]                    # 11-NPY-P4/16
+
+  - [[10, 11], Concat, []]                                                        # 12-P4/16-fused-for-RGB
+  - [-1, HG_Stage, [128, 1024, 1, 3, True, True, 5, True, 'se']]                 # 13-RGB-P5/32 (from fused P4)
+  - [11, HG_Stage, [128, 512, 1, 1, True, True, 5, True, 'se']]                  # 14-NPY-P5/32
+
+  - [[13, 14], Concat, []]                                                        # 15-P5/32
+
+encoder:
+  - [9, ConvNormLayer_fuse, [256, 1, 1]]                                          # 16-P3/8
+  - [12, ConvNormLayer_fuse, [256, 1, 1]]                                         # 17-P4/16
+  - [15, ConvNormLayer_fuse, [256, 1, 1]]                                         # 18-P5/32
+
+  - [-1, TransformerEncoderBlock, [8, 1024, 0.1, "relu", 10000, False]]         # 19-P5/32
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]                                         # 20
+  - [-1, nn.Upsample, [None, 2, "nearest"]]                                      # 21
+  - [[-1, 17], Concat, []]                                                        # 22-P4/16
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']]                         # 23-P4/16
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]                                         # 24
+  - [-1, nn.Upsample, [None, 2, "nearest"]]                                      # 25
+  - [[-1, 16], Concat, []]                                                        # 26-P3/8
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']]                         # 27-P3/8
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]                                             # 28-P4/16
+  - [[-1, 24], Concat, []]                                                        # 29-P4/16
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']]                         # 30-P4/16
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]                                             # 31-P5/32
+  - [[-1, 20], Concat, []]                                                        # 32-P5/32
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']]                         # 33-P5/32
+
+decoder:
+  - [[27, 30, 33], DFINETransformer, {"feat_strides":[8, 16, 32], "hidden_dim": 256, "num_levels": 3, "num_layers": 3, "num_points": [3, 6, 3], "dim_feedforward": 1024}]

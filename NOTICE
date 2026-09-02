@@ -1,0 +1,10 @@
+Airfield-M4 multimodal detection code release
+
+This repository contains an RGB-auxiliary extension of D-FINE built on the
+DEIM codebase. The upstream DEIM project is available at:
+https://github.com/ShihuaHuang95/DEIM
+
+D-FINE paper and project:
+https://github.com/Peterande/D-FINE
+
+The original Apache License 2.0 and upstream attribution are retained.

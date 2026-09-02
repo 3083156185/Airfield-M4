@@ -1,0 +1,85 @@
+backbone:
+  # Strict late-fusion baseline for D-FINE-S.
+  # RGB and infrared branches are kept independent through the backbone.
+  # Fusion is delayed until after each branch has produced neck-level P3/P4/P5 features.
+  # [from, module, args]
+  - [-1, nn.Identity, []]                         # 0 input dict
+  - [0, GetRGBModalityTensor, []]                 # 1 RGB tensor
+  - [0, GetNPYModalityTensor, []]                 # 2 infrared/npy tensor
+
+  # RGB branch, following the standard D-FINE-S backbone depth.
+  - [1, StemBlock, [16, 16, True]]                # 3 RGB-P2/4
+  - [-1, HG_Stage, [16, 64, 1, 3, False, False, 3, True, 'se']]      # 4 RGB-P2/4
+  - [-1, HG_Stage, [32, 256, 1, 3, True, False, 3, True, 'se']]      # 5 RGB-P3/8
+  - [-1, HG_Stage, [64, 512, 2, 3, True, True, 5, True, 'se']]       # 6 RGB-P4/16
+  - [-1, HG_Stage, [128, 1024, 1, 3, True, True, 5, True, 'se']]     # 7 RGB-P5/32
+
+  # Infrared auxiliary branch, kept lightweight as in the other D-FINE-S fusion runs.
+  - [2, StemBlock, [16, 16, True]]                # 8 IR-P2/4
+  - [-1, HG_Stage, [16, 32, 1, 1, False, False, 3, True, 'se']]      # 9 IR-P2/4
+  - [-1, HG_Stage, [32, 128, 1, 1, True, False, 3, True, 'se']]      # 10 IR-P3/8
+  - [-1, HG_Stage, [64, 256, 1, 1, True, True, 5, True, 'se']]       # 11 IR-P4/16
+  - [-1, HG_Stage, [128, 512, 1, 1, True, True, 5, True, 'se']]      # 12 IR-P5/32
+
+encoder:
+  # RGB neck.
+  - [5, ConvNormLayer_fuse, [256, 1, 1]]          # 13 RGB-P3/8
+  - [6, ConvNormLayer_fuse, [256, 1, 1]]          # 14 RGB-P4/16
+  - [7, ConvNormLayer_fuse, [256, 1, 1]]          # 15 RGB-P5/32
+
+  - [-1, TransformerEncoderBlock, [8, 1024, 0.1, "relu", 10000, False]] # 16 RGB-P5/32
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]         # 17 RGB-lateral P5
+  - [-1, nn.Upsample, [None, 2, "nearest"]]      # 18
+  - [[-1, 14], Concat, []]                       # 19 RGB-P4 top-down
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 20 RGB-P4
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]         # 21 RGB-lateral P4
+  - [-1, nn.Upsample, [None, 2, "nearest"]]      # 22
+  - [[-1, 13], Concat, []]                       # 23 RGB-P3 top-down
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 24 RGB neck P3
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]            # 25
+  - [[-1, 21], Concat, []]                       # 26 RGB-P4 bottom-up
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 27 RGB neck P4
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]            # 28
+  - [[-1, 17], Concat, []]                       # 29 RGB-P5 bottom-up
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 30 RGB neck P5
+
+  # Infrared neck.
+  - [10, ConvNormLayer_fuse, [256, 1, 1]]         # 31 IR-P3/8
+  - [11, ConvNormLayer_fuse, [256, 1, 1]]         # 32 IR-P4/16
+  - [12, ConvNormLayer_fuse, [256, 1, 1]]         # 33 IR-P5/32
+
+  - [-1, TransformerEncoderBlock, [8, 1024, 0.1, "relu", 10000, False]] # 34 IR-P5/32
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]         # 35 IR-lateral P5
+  - [-1, nn.Upsample, [None, 2, "nearest"]]      # 36
+  - [[-1, 32], Concat, []]                       # 37 IR-P4 top-down
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 38 IR-P4
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]]         # 39 IR-lateral P4
+  - [-1, nn.Upsample, [None, 2, "nearest"]]      # 40
+  - [[-1, 31], Concat, []]                       # 41 IR-P3 top-down
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 42 IR neck P3
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]            # 43
+  - [[-1, 39], Concat, []]                       # 44 IR-P4 bottom-up
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 45 IR neck P4
+
+  - [-1, SCDown, [256, 3, 2, 'silu']]            # 46
+  - [[-1, 35], Concat, []]                       # 47 IR-P5 bottom-up
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 48 IR neck P5
+
+  # Late neck-level fusion. Only final scale-aligned neck features interact.
+  - [[24, 42], Concat, []]                       # 49 fused late P3/8
+  - [[27, 45], Concat, []]                       # 50 fused late P4/16
+  - [[30, 48], Concat, []]                       # 51 fused late P5/32
+
+  - [49, ConvNormLayer_fuse, [256, 1, 1]]        # 52 fused P3/8
+  - [50, ConvNormLayer_fuse, [256, 1, 1]]        # 53 fused P4/16
+  - [51, ConvNormLayer_fuse, [256, 1, 1]]        # 54 fused P5/32
+
+decoder:
+  - [[52, 53, 54], DFINETransformer, {"feat_strides":[8, 16, 32], "hidden_dim": 256, "num_levels": 3, "num_layers": 3, "num_points": [3, 6, 3], "dim_feedforward": 1024}]

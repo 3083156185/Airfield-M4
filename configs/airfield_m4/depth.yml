@@ -1,0 +1,166 @@
+task: detection
+
+evaluator:
+  type: CocoEvaluator
+  iou_types: [bbox]
+  using_tiny_metrice: false
+  using_vtiny_metrice: false
+  max_dets: 300
+yolo_metrice: false
+
+num_classes: 7
+ram_cache: false
+eval_spatial_size: [640, 640]
+
+train_dataloader:
+  type: DataLoader
+  dataset:
+    type: MultimodalCocoDetection
+    img_folder: data/Airfield-M4/rgb/train/images
+    npy_folder: data/Airfield-M4/depth/train/npy
+    ann_file: data/Airfield-M4/annotations/instances_train.json
+    return_masks: false
+    npy_size_mismatch: error
+    transforms:
+      type: MultimodalCompose
+      ops:
+      - {type: RandomPhotometricDistort, p: 0.5}
+      - {type: RandomZoomOut, fill: 0}
+      - {type: RandomIoUCrop, p: 0.8}
+      - {type: SanitizeBoundingBoxes, min_size: 1}
+      - {type: RandomHorizontalFlip}
+      - {type: Resize, size: [640, 640]}
+      - {type: SanitizeBoundingBoxes, min_size: 1}
+      - {type: ConvertPILImage, dtype: float32, scale: true}
+      - {type: NormalizeNPYMinMax}
+      - {type: ConvertBoxes, fmt: cxcywh, normalize: true}
+      policy:
+        name: stop_epoch
+        epoch: 120
+        ops: [RandomPhotometricDistort, RandomZoomOut, RandomIoUCrop]
+
+  total_batch_size: 8
+  num_workers: 4
+  shuffle: true
+  drop_last: true
+  pin_memory: true
+  collate_fn:
+    type: BatchMultimodalCollateFunction
+    base_size: 640
+    base_size_repeat: ~
+    ema_restart_decay: 0.9999
+    stop_epoch: 120
+
+val_dataloader:
+  type: DataLoader
+  dataset:
+    type: MultimodalCocoDetection
+    img_folder: data/Airfield-M4/rgb/val/images
+    npy_folder: data/Airfield-M4/depth/val/npy
+    ann_file: data/Airfield-M4/annotations/instances_val.json
+    return_masks: false
+    npy_size_mismatch: error
+    transforms:
+      type: MultimodalCompose
+      ops:
+      - {type: Resize, size: [640, 640]}
+      - {type: ConvertPILImage, dtype: float32, scale: true}
+      - {type: NormalizeNPYMinMax}
+
+  total_batch_size: 8
+  num_workers: 4
+  shuffle: false
+  drop_last: false
+  pin_memory: true
+  collate_fn:
+    type: BatchMultimodalCollateFunction
+
+model: DEIM_MG
+DEIM_MG:
+  yaml_path: configs/multimodal/yaml/dfine_s_aux_only.yml
+  pretrained: ~
+
+epoches: 132
+
+postprocessor: PostProcessor
+
+baseline_log_monitor:
+  enabled: False
+  path: outputs/baseline/log.txt
+  metric: test_coco_eval_bbox[0]
+  start_ratio: 0.5
+  min_ap_gap: 0.02
+  patience: 1
+
+print_freq: 2000
+verbose_type: origin
+output_dir: ./outputs/airfield_m4/depth
+
+optimizer:
+  type: AdamW
+  params:
+  - params: ^(?=.*backbone)(?!.*norm|bn).*$
+    lr: 0.0001
+  - params: ^(?=.*backbone)(?=.*norm|bn).*$
+    lr: 0.0001
+    weight_decay: 0.0
+  - params: ^(?=.*(?:encoder|decoder))(?=.*(?:norm|bn|bias)).*$
+    weight_decay: 0.0
+  lr: 0.0001
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+
+criterion: DEIMCriterion
+DEIMCriterion:
+  weight_dict:
+    loss_vfl: 1
+    loss_bbox: 5
+    loss_giou: 2
+    loss_fgl: 0.15
+    loss_ddf: 1.5
+  losses: [vfl, boxes, local]
+  alpha: 0.75
+  gamma: 2.0
+  reg_max: 32
+  matcher:
+    type: HungarianMatcher
+    weight_dict:
+      cost_class: 2
+      cost_bbox: 5
+      cost_giou: 2
+    alpha: 0.25
+    gamma: 2.0
+  no_weight_vfl_epoch: -1
+use_focal_loss: true
+
+remap_mscoco_category: false
+sync_bn: true
+find_unused_parameters: true
+use_amp: false
+scaler:
+  type: GradScaler
+  enabled: true
+use_ema: true
+ema:
+  type: ModelEMA
+  decay: 0.9999
+  warmups: 1000
+  start: 0
+plot_train_batch_freq: 12
+checkpoint_freq: 12
+cache_imgsz: 960
+clip_max_norm: 0.1
+warmup_iter: 500
+lr_warmup_scheduler:
+  type: LinearWarmup
+  warmup_duration: 500
+lr_scheduler:
+  type: MultiStepLR
+  milestones: [500]
+  gamma: 0.1
+lrsheduler: flatcosine
+lr_gamma: 1
+flat_epoch: 4000000
+no_aug_epoch: 0
+PostProcessor:
+  num_top_queries: 300

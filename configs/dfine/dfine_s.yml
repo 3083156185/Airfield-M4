@@ -1,0 +1,35 @@
+backbone:
+  # [from, module, args]
+  - [-1, StemBlock, [16, 16, True]] # 0-P2/4
+  - [-1, HG_Stage, [16, 64, 1, 3, False, False, 3, True, 'se']] # 1-P2/4
+  - [-1, HG_Stage, [32, 256, 1, 3, True, False, 3, True, 'se']] # 2-P3/8
+  - [-1, HG_Stage, [64, 512, 2, 3, True, True, 5, True, 'se']]  # 3-P4/16
+  - [-1, HG_Stage, [128, 1024, 1, 3, True, True, 5, True, 'se']] # 4-P5/32
+
+encoder:
+  - [2, ConvNormLayer_fuse, [256, 1, 1]] # 5-P3/8
+  - [3, ConvNormLayer_fuse, [256, 1, 1]] # 6-P4/16
+  - [4, ConvNormLayer_fuse, [256, 1, 1]] # 7-P5/32
+
+  - [-1, TransformerEncoderBlock, [8, 1024, 0.1, "relu", 10000, False]] # 8-P5/32
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]] # 9
+  - [-1, nn.Upsample, [None, 2, "nearest"]] # 10
+  - [[-1, 6], Concat, []] # 11-P4/16
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 12-P4/16
+
+  - [-1, ConvNormLayer_fuse, [256, 1, 1]] # 13
+  - [-1, nn.Upsample, [None, 2, "nearest"]] # 14
+  - [[-1, 5], Concat, []] # 15-P3/8
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 16-P3/8
+
+  - [-1, SCDown, [256, 3, 2, 'silu']] # 17-P4/16
+  - [[-1, 13], Concat, []] # 18-P4/16
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 19-P4/16
+
+  - [-1, SCDown, [256, 3, 2, 'silu']] # 20-P5/32
+  - [[-1, 9], Concat, []] # 21-P5/32
+  - [-1, RepNCSPELAN4, [256, 512, 64, 1, False, 'silu']] # 22-P5/32
+
+decoder:
+  - [[16, 19, 22], DFINETransformer, {"feat_strides":[8, 16, 32], "hidden_dim": 256, "num_levels": 3, "num_layers": 3, "num_points": [3, 6, 3], "dim_feedforward": 1024}]
